@@ -1,0 +1,23 @@
+{
+  "name": "designery-back",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev-server": "nodemon app.js"
+  },
+  "author": "Henri Hosio",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/cli": "^7.14.8",
+    "@babel/core": "^7.14.8",
+    "@babel/node": "^7.14.9",
+    "@babel/preset-env": "^7.14.9",
+    "nodemon": "^2.0.12"
+  },
+  "dependencies": {
+    "dayjs": "^1.10.6",
+    "express": "^4.17.1",
+    "mongodb": "^4.0.1",
+    "mongoose": "^5.13.5"
+  }
+}

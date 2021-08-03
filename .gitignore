@@ -1,0 +1,5 @@
+node_modules/
+public/images
+dump/
+db/
+.DS_Store
