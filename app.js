@@ -43,37 +43,38 @@ app.get('/', async (req, res) => {
   }
 });
 
-app.post('/idea', async (req, res) => {
+app.post('/item/:type', async (req, res) => {
   const body = req.body;
   try {
-    console.log(body);
+    if (!body._id) body._id = new ObjectId();
+    if (req.params.type === "idea") {
+      ideaModel.findOneAndUpdate({'_id': body._id}, body, {upsert: true}, (err, doc) => {
+        if (err) return res.send(500, {error: err});
+        return res.status(200).send();
+      });
+    } else if (req.params.type === "project") {
+      projectModel.findOneAndUpdate({'_id': body._id}, body, {upsert: true}, (err, doc) => {
+        if (err) return res.send(500, {error: err});
+        return res.status(200).send();
+      });
+    } else if (req.params.type === "inspiration") {
+      inspirationModel.findOneAndUpdate({'_id': body._id}, body, {upsert: true}, (err, doc) => {
+        if (err) return res.send(500, {error: err});
+        return res.status(200).send();
+      });
+    } else if (req.params.type === "tag") {
+      tagModel.findOneAndUpdate({'_id': body._id}, body, {upsert: true}, (err, doc) => {
+        if (err) return res.send(500, {error: err});
+        return res.status(200).send();
+      });
+    } else return res.status(500).send();
   } catch(error) {
     res.status(500).send(error);
   }
 });
 
-app.post('/project', async (req, res) => {
-  const body = req.body;
+app.post('/image', async (req, res) => {
   try {
-    console.log(body);
-  } catch(error) {
-    res.status(500).send(error);
-  }
-});
-
-app.post('/inspiration', async (req, res) => {
-  const body = req.body;
-  try {
-    console.log(body);
-  } catch(error) {
-    res.status(500).send(error);
-  }
-});
-
-app.post('/tag', async (req, res) => {
-  const body = req.body;
-  try {
-    console.log(body);
   } catch(error) {
     res.status(500).send(error);
   }
