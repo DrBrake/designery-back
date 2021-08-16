@@ -1,7 +1,6 @@
 const express = require('express');
 const path = require('path');
 const mongoose = require('mongoose');
-const dayjs = require('dayjs');
 const schemas = require('./schema');
 const fs = require('fs');
 

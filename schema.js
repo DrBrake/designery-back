@@ -5,7 +5,7 @@ const ObjectId = mongoose.Schema.Types.ObjectId;
 exports.ideaSchema = new Schema({
   _id: ObjectId,
   Title: String,
-  Description: String,
+  Description: Object,
   ImageRefs: Array,
   Drafts: Array,
   CompletedWorks: Array,
@@ -15,16 +15,16 @@ exports.ideaSchema = new Schema({
   Inspirations: Array,
   DateCreated: String,
   Variant: String,
-});
+}, { minimize: false });
 
 exports.projectSchema = new Schema({
   _id: ObjectId,
   Title: String,
-  Description: String,
+  Description: Object,
   Ideas: Array,
   DateCreated: String,
   Variant: String,
-});
+}, { minimize: false });
 
 exports.inspirationSchema = new Schema({
   _id: ObjectId,
