@@ -17,6 +17,7 @@ const dir = path.join(__dirname, 'public');
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "http://localhost:3000");
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  res.header("Access-Control-Allow-Methods", "POST, GET, OPTIONS, DELETE");
   next();
 });
 
@@ -63,6 +64,34 @@ app.post('/item/:type', async (req, res) => {
       });
     } else if (req.params.type === "tag") {
       tagModel.findOneAndUpdate({'_id': body._id}, body, {upsert: true}, (err, doc) => {
+        if (err) return res.send(500, {error: err});
+        return res.status(200).send();
+      });
+    } else return res.status(500).send();
+  } catch(error) {
+    res.status(500).send(error);
+  }
+});
+
+app.delete('/item/:type/:id', async (req, res) => {
+  try {
+    if (req.params.type === "idea") {
+      ideaModel.findOneAndDelete({'_id': req.params.id }, {}, (err, doc) => {
+        if (err) return res.send(500, {error: err});
+        return res.status(200).send();
+      });
+    } else if (req.params.type === "project") {
+      projectModel.findOneAndDelete({'_id': req.params.id }, {}, (err, doc) => {
+        if (err) return res.send(500, {error: err});
+        return res.status(200).send();
+      });
+    } else if (req.params.type === "inspiration") {
+      inspirationModel.findOneAndDelete({'_id': req.params.id }, {}, (err, doc) => {
+        if (err) return res.send(500, {error: err});
+        return res.status(200).send();
+      });
+    } else if (req.params.type === "tag") {
+      tagModel.findOneAndDelete({'_id': req.params.id }, {}, (err, doc) => {
         if (err) return res.send(500, {error: err});
         return res.status(200).send();
       });
