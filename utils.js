@@ -15,6 +15,19 @@ const isURL = (url) => {
   return false;
 };
 
+const getImage = (inputFile, query) => {
+  const width = query.w && parseInt(query.w);
+  const widthIsNumber = !isNaN(width);
+
+  const height = query.h && parseInt(query.h);
+  const heightIsNumber = !isNaN(height);
+
+  return sharp(inputFile)
+    .jpeg({ quality: 100 })
+    .resize(widthIsNumber ? width : null, heightIsNumber ? height : null)
+    .toBuffer();
+};
+
 const saveImage = (inputFile, variant, imageName) => {
   try {
     const img = inputFile.file.split(";base64,").pop();
@@ -38,6 +51,15 @@ const downloadImage = async (url, variant, imageName) => {
   });
 };
 
+const removeImage = (variant, imageName) => {
+  fs.unlinkSync(`${dir}/images/${variant}/${imageName}`, (err) => {
+    if (err) console.log(err);
+    return;
+  });
+};
+
 exports.isURL = isURL;
+exports.getImage = getImage;
 exports.saveImage = saveImage;
 exports.downloadImage = downloadImage;
+exports.removeImage = removeImage;

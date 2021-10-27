@@ -1,14 +1,23 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const schemas = require("./schema");
+const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 
-const { isURL, saveImage, downloadImage } = require("./utils");
+const {
+  isURL,
+  getImage,
+  saveImage,
+  downloadImage,
+  removeImage,
+} = require("./utils");
 
 const app = express();
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb" }));
+
+const dir = path.join(__dirname, "public");
 
 const ideaModel = mongoose.model("Idea", schemas.ideaSchema, "ideas");
 const projectModel = mongoose.model(
@@ -65,8 +74,9 @@ app.get("/", async (req, res) => {
   }
 });
 
-app.post("/item/:type", async (req, res) => {
+app.post("/item/:variant", async (req, res) => {
   const body = req.body;
+  const { variant } = req.params;
   try {
     if (!body._id) body._id = new ObjectId();
     if (body.NewImageRefFiles) {
@@ -82,22 +92,29 @@ app.post("/item/:type", async (req, res) => {
         if (isURL(image)) {
           const imageName = `${uuidv4()}.jpg`;
           await downloadImage(body.ImageRefs[i], body.Variant, imageName);
-          body.ImageRefs.push(imageName);
+          body.ImageRefs[i] = imageName;
         }
       }
     }
     delete body.NewImageRefFiles;
-    if (req.params.type === "idea") {
+    if (variant === "idea") {
       ideaModel.findOneAndUpdate(
         { _id: body._id },
         body,
         { upsert: true },
         (err, doc) => {
+          if (doc) {
+            doc.ImageRefs.forEach((item) => {
+              if (!body.ImageRefs.includes(item)) {
+                removeImage(variant, item);
+              }
+            });
+          }
           if (err) return res.send(500, { error: err });
           return res.status(200).send();
         }
       );
-    } else if (req.params.type === "project") {
+    } else if (variant === "project") {
       projectModel.findOneAndUpdate(
         { _id: body._id },
         body,
@@ -107,17 +124,24 @@ app.post("/item/:type", async (req, res) => {
           return res.status(200).send();
         }
       );
-    } else if (req.params.type === "inspiration") {
+    } else if (variant === "inspiration") {
       inspirationModel.findOneAndUpdate(
         { _id: body._id },
         body,
         { upsert: true },
         (err, doc) => {
+          if (doc) {
+            doc.ImageRefs.forEach((item) => {
+              if (!body.ImageRefs.includes(item)) {
+                removeImage(variant, item);
+              }
+            });
+          }
           if (err) return res.send(500, { error: err });
           return res.status(200).send();
         }
       );
-    } else if (req.params.type === "tag") {
+    } else if (variant === "tag") {
       tagModel.findOneAndUpdate(
         { _id: body._id },
         body,
@@ -133,29 +157,32 @@ app.post("/item/:type", async (req, res) => {
   }
 });
 
-app.delete("/item/:type/:id", async (req, res) => {
+app.delete("/item/:variant/:id", async (req, res) => {
   try {
-    if (req.params.type === "idea") {
-      ideaModel.findOneAndDelete({ _id: req.params.id }, {}, (err, doc) => {
-        if (err) return res.send(500, { error: err });
-        return res.status(200).send();
-      });
-    } else if (req.params.type === "project") {
-      projectModel.findOneAndDelete({ _id: req.params.id }, {}, (err, doc) => {
-        if (err) return res.send(500, { error: err });
-        return res.status(200).send();
-      });
-    } else if (req.params.type === "inspiration") {
-      inspirationModel.findOneAndDelete(
-        { _id: req.params.id },
-        {},
-        (err, doc) => {
-          if (err) return res.send(500, { error: err });
-          return res.status(200).send();
+    const { id, variant } = req.params;
+    if (variant === "idea") {
+      ideaModel.findOneAndDelete({ _id: id }, {}, (err, doc) => {
+        if (doc) {
+          doc.ImageRefs.forEach((item) => removeImage(variant, item));
         }
-      );
-    } else if (req.params.type === "tag") {
-      tagModel.findOneAndDelete({ _id: req.params.id }, {}, (err, doc) => {
+        if (err) return res.send(500, { error: err });
+        return res.status(200).send();
+      });
+    } else if (variant === "project") {
+      projectModel.findOneAndDelete({ _id: id }, {}, (err, doc) => {
+        if (err) return res.send(500, { error: err });
+        return res.status(200).send();
+      });
+    } else if (variant === "inspiration") {
+      inspirationModel.findOneAndDelete({ _id: id }, {}, (err, doc) => {
+        if (doc) {
+          doc.ImageRefs.forEach((item) => removeImage(variant, item));
+        }
+        if (err) return res.send(500, { error: err });
+        return res.status(200).send();
+      });
+    } else if (variant === "tag") {
+      tagModel.findOneAndDelete({ _id: id }, {}, (err, doc) => {
         if (err) return res.send(500, { error: err });
         return res.status(200).send();
       });
@@ -165,9 +192,22 @@ app.delete("/item/:type/:id", async (req, res) => {
   }
 });
 
-app.post("/image", async (req, res) => {
+app.get("/images/:variant/:image", async (req, res) => {
   try {
+    const data = await getImage(
+      `${dir}/images/${req.params.variant}/${req.params.image}`,
+      req.query
+    );
+    if (data) {
+      res.writeHead(200, {
+        "Content-Type": "image/jpeg",
+        "Content-Length": data.length,
+        "Cache-Control": "public, max-age=86400",
+      });
+      res.end(data);
+    } else res.status(500).send();
   } catch (error) {
+    console.log(error);
     res.status(500).send(error);
   }
 });
