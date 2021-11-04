@@ -12,7 +12,7 @@ exports.ideaSchema = new Schema(
     CompletedWorks: Array,
     Completed: Boolean,
     Tags: Array,
-    Project: String,
+    Project: Object,
     Inspirations: Array,
     DateCreated: String,
     Variant: String,
@@ -27,22 +27,26 @@ exports.projectSchema = new Schema(
     Description: Object,
     Tags: Array,
     Ideas: Array,
+    Completed: Boolean,
     DateCreated: String,
     Variant: String,
   },
   { minimize: false }
 );
 
-exports.inspirationSchema = new Schema({
-  _id: ObjectId,
-  Title: String,
-  Description: Object,
-  ImageRefs: Array,
-  Tags: Array,
-  Ideas: Array,
-  DateCreated: String,
-  Variant: String,
-});
+exports.inspirationSchema = new Schema(
+  {
+    _id: ObjectId,
+    Title: String,
+    Description: Object,
+    ImageRefs: Array,
+    Tags: Array,
+    Ideas: Array,
+    DateCreated: String,
+    Variant: String,
+  },
+  { minimize: false }
+);
 
 exports.tagSchema = new Schema({
   _id: ObjectId,

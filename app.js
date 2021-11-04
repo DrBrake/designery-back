@@ -2,6 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const schemas = require("./schema");
 const path = require("path");
+const dayjs = require("dayjs");
 const { v4: uuidv4 } = require("uuid");
 
 const {
@@ -70,6 +71,7 @@ app.get("/", async (req, res) => {
     ]);
     res.send({ ideas, projects, inspirations, tags });
   } catch (error) {
+    console.log(error);
     res.status(500).send(error);
   }
 });
@@ -96,8 +98,56 @@ app.post("/item/:variant", async (req, res) => {
         }
       }
     }
+    if (body.Tags) {
+      for (let i = 0; i < body.Tags.length; i++) {
+        const tag = body.Tags[i];
+        if (!tag._id) {
+          tag._id = new ObjectId();
+          await tagModel.create(tag);
+        }
+      }
+    }
+    // Only add simple versions of Inspiration and Project to Idea?
+    if (body.Inspirations) {
+      for (let i = 0; i < body.Inspirations.length; i++) {
+        const inspiration = body.Inspirations[i];
+        if (!inspiration.Ideas) inspiration.Ideas = [];
+        if (!inspiration.Ideas.some((item) => item._id === body._id)) {
+          inspiration.Ideas.push({
+            _id: ObjectId(body._id),
+            Title: body.Title,
+          });
+        }
+        if (inspiration._id) inspiration._id = ObjectId(inspiration._id);
+        else {
+          inspiration._id = new ObjectId();
+          inspiration.DateCreated = dayjs().format();
+          await inspirationModel.create(inspiration);
+        }
+      }
+    }
+    if (body.Project) {
+      const project = body.Project;
+      if (!project.Ideas) project.Ideas = [];
+      if (!project.Ideas.some((item) => item._id === body._id)) {
+        project.Ideas.push({
+          _id: ObjectId(body._id),
+          Title: body.Title,
+        });
+      }
+      if (project._id) project._id = ObjectId(project._id);
+      await projectModel.findOneAndUpdate(
+        { _id: body.Project._id },
+        {
+          $addToSet: {
+            Ideas: { _id: ObjectId(body._id), Title: body.Title },
+          },
+        }
+      );
+    }
     delete body.NewImageRefFiles;
     if (variant === "idea") {
+      // Update Titles in Inspirations and Projects
       ideaModel.findOneAndUpdate(
         { _id: body._id },
         body,
@@ -110,21 +160,29 @@ app.post("/item/:variant", async (req, res) => {
               }
             });
           }
-          if (err) return res.send(500, { error: err });
+          if (err) {
+            console.log(err);
+            return res.send(500, { error: err });
+          }
           return res.status(200).send();
         }
       );
     } else if (variant === "project") {
+      // Update Titles in Ideas
       projectModel.findOneAndUpdate(
         { _id: body._id },
         body,
         { upsert: true },
         (err, doc) => {
-          if (err) return res.send(500, { error: err });
+          if (err) {
+            console.log(err);
+            return res.send(500, { error: err });
+          }
           return res.status(200).send();
         }
       );
     } else if (variant === "inspiration") {
+      // Update Titles in Ideas
       inspirationModel.findOneAndUpdate(
         { _id: body._id },
         body,
@@ -137,22 +195,16 @@ app.post("/item/:variant", async (req, res) => {
               }
             });
           }
-          if (err) return res.send(500, { error: err });
-          return res.status(200).send();
-        }
-      );
-    } else if (variant === "tag") {
-      tagModel.findOneAndUpdate(
-        { _id: body._id },
-        body,
-        { upsert: true },
-        (err, doc) => {
-          if (err) return res.send(500, { error: err });
+          if (err) {
+            console.log(err);
+            return res.send(500, { error: err });
+          }
           return res.status(200).send();
         }
       );
     } else return res.status(500).send();
   } catch (error) {
+    console.log(error);
     res.status(500).send(error);
   }
 });
@@ -161,33 +213,66 @@ app.delete("/item/:variant/:id", async (req, res) => {
   try {
     const { id, variant } = req.params;
     if (variant === "idea") {
-      ideaModel.findOneAndDelete({ _id: id }, {}, (err, doc) => {
+      await ideaModel.findOneAndDelete({ _id: id }, {}, async (err, doc) => {
         if (doc) {
           doc.ImageRefs.forEach((item) => removeImage(variant, item));
+          if (doc.Project) {
+            await projectModel.findOneAndUpdate(
+              { _id: doc.Project._id },
+              { $pull: { Ideas: { _id: doc._id } } }
+            );
+          }
+          if (doc.Inspirations) {
+            await inspirationModel.updateMany(
+              {},
+              { $pull: { Ideas: { _id: doc._id } } }
+            );
+          }
         }
-        if (err) return res.send(500, { error: err });
+        if (err) {
+          console.log(err);
+          return res.send(500, { error: err });
+        }
         return res.status(200).send();
       });
     } else if (variant === "project") {
-      projectModel.findOneAndDelete({ _id: id }, {}, (err, doc) => {
-        if (err) return res.send(500, { error: err });
+      await projectModel.findOneAndDelete({ _id: id }, {}, async (err, doc) => {
+        await ideaModel.updateMany(
+          { "Project._id": doc._id },
+          { $set: { Project: null } }
+        );
+        if (err) {
+          console.log(err);
+          return res.send(500, { error: err });
+        }
         return res.status(200).send();
       });
     } else if (variant === "inspiration") {
-      inspirationModel.findOneAndDelete({ _id: id }, {}, (err, doc) => {
-        if (doc) {
-          doc.ImageRefs.forEach((item) => removeImage(variant, item));
+      await inspirationModel.findOneAndDelete(
+        { _id: id },
+        {},
+        async (err, doc) => {
+          if (doc) {
+            doc.ImageRefs.forEach((item) => removeImage(variant, item));
+            await ideaModel.updateMany(
+              {},
+              {
+                $pull: {
+                  Inspirations: { _id: doc._id },
+                },
+              }
+            );
+          }
+          if (err) {
+            console.log(err);
+            return res.send(500, { error: err });
+          }
+          return res.status(200).send();
         }
-        if (err) return res.send(500, { error: err });
-        return res.status(200).send();
-      });
-    } else if (variant === "tag") {
-      tagModel.findOneAndDelete({ _id: id }, {}, (err, doc) => {
-        if (err) return res.send(500, { error: err });
-        return res.status(200).send();
-      });
+      );
     } else return res.status(500).send();
   } catch (error) {
+    console.log(error);
     res.status(500).send(error);
   }
 });

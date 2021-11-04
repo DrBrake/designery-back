@@ -3,3 +3,4 @@ public/images
 dump/
 db/
 .DS_Store
+mongo-cheat-sheet.js
