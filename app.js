@@ -81,19 +81,16 @@ app.post("/item/:variant", async (req, res) => {
   const { variant } = req.params;
   try {
     if (!body._id) body._id = new ObjectId();
-    if (body.NewImageRefFiles) {
-      for (let i = 0; i < body.NewImageRefFiles.length; i++) {
-        const imageName = `${uuidv4()}.jpg`;
-        await saveImage(body.NewImageRefFiles[i], body.Variant, imageName);
-        if (body.ImageRefs) body.ImageRefs.push(imageName);
-      }
-    }
     if (body.ImageRefs) {
       for (let i = 0; i < body.ImageRefs.length; i++) {
         const image = body.ImageRefs[i];
-        if (isURL(image)) {
+        if (typeof image === "string" && isURL(image)) {
           const imageName = `${uuidv4()}.jpg`;
           await downloadImage(body.ImageRefs[i], body.Variant, imageName);
+          body.ImageRefs[i] = imageName;
+        } else if (image.file) {
+          const imageName = `${uuidv4()}.jpg`;
+          await saveImage(body.ImageRefs[i], body.Variant, imageName);
           body.ImageRefs[i] = imageName;
         }
       }
@@ -145,7 +142,6 @@ app.post("/item/:variant", async (req, res) => {
         }
       );
     }
-    delete body.NewImageRefFiles;
     if (variant === "idea") {
       // Update Titles in Inspirations and Projects
       ideaModel.findOneAndUpdate(
