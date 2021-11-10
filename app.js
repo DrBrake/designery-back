@@ -104,22 +104,29 @@ app.post("/item/:variant", async (req, res) => {
         }
       }
     }
-    // Only add simple versions of Inspiration and Project to Idea?
     if (body.Inspirations) {
       for (let i = 0; i < body.Inspirations.length; i++) {
         const inspiration = body.Inspirations[i];
         if (!inspiration.Ideas) inspiration.Ideas = [];
         if (!inspiration.Ideas.some((item) => item._id === body._id)) {
           inspiration.Ideas.push({
-            _id: ObjectId(body._id),
+            _id: body._id,
             Title: body.Title,
           });
         }
-        if (inspiration._id) inspiration._id = ObjectId(inspiration._id);
-        else {
+        if (!inspiration._id) {
           inspiration._id = new ObjectId();
           inspiration.DateCreated = dayjs().format();
           await inspirationModel.create(inspiration);
+        } else {
+          await inspirationModel.findOneAndUpdate(
+            { _id: inspiration._id, "Ideas._id": { $ne: body._id } },
+            {
+              $addToSet: {
+                Ideas: { _id: body._id, Title: body.Title },
+              },
+            }
+          );
         }
       }
     }
@@ -128,33 +135,57 @@ app.post("/item/:variant", async (req, res) => {
       if (!project.Ideas) project.Ideas = [];
       if (!project.Ideas.some((item) => item._id === body._id)) {
         project.Ideas.push({
-          _id: ObjectId(body._id),
+          _id: body._id,
           Title: body.Title,
         });
       }
-      if (project._id) project._id = ObjectId(project._id);
       await projectModel.findOneAndUpdate(
-        { _id: body.Project._id },
+        { _id: project._id, "Ideas._id": { $ne: body._id } },
         {
           $addToSet: {
-            Ideas: { _id: ObjectId(body._id), Title: body.Title },
+            Ideas: { _id: body._id, Title: body.Title },
           },
         }
       );
+    } else {
+      body.Project = null;
     }
+
     if (variant === "idea") {
-      // Update Titles in Inspirations and Projects
       ideaModel.findOneAndUpdate(
         { _id: body._id },
         body,
         { upsert: true },
-        (err, doc) => {
+        async (err, doc) => {
           if (doc) {
             doc.ImageRefs.forEach((item) => {
               if (!body.ImageRefs.includes(item)) {
                 removeImage(variant, item);
               }
             });
+            if (body.Project !== doc.Project) {
+              await projectModel.findOneAndUpdate(
+                { _id: doc.Project._id },
+                { $pull: { Ideas: { _id: doc._id } } }
+              );
+            }
+            const removedInspirations = doc.Inspirations.filter(
+              (item) => !body.Inspirations.includes(item)
+            ).map((item) => item._id);
+            await inspirationModel.updateMany(
+              { _id: { $in: removedInspirations } },
+              { $pull: { Ideas: { _id: doc._id } } }
+            );
+            if (body.Title !== doc.Title) {
+              await inspirationModel.updateMany(
+                { "Ideas._id": doc._id },
+                { $set: { "Ideas.$.Title": body.Title } }
+              );
+              await projectModel.updateOne(
+                { "Ideas._id": doc._id },
+                { $set: { "Ideas.$.Title": body.Title } }
+              );
+            }
           }
           if (err) {
             console.log(err);
@@ -164,12 +195,26 @@ app.post("/item/:variant", async (req, res) => {
         }
       );
     } else if (variant === "project") {
-      // Update Titles in Ideas
       projectModel.findOneAndUpdate(
         { _id: body._id },
         body,
         { upsert: true },
-        (err, doc) => {
+        async (err, doc) => {
+          if (doc) {
+            const removedIdeas = doc.Ideas.filter(
+              (item) => !body.Ideas.includes(item)
+            ).map((item) => item._id);
+            await ideaModel.updateMany(
+              { _id: { $in: removedIdeas } },
+              { $set: { Project: null } }
+            );
+            if (body.Title !== doc.Title) {
+              await ideaModel.updateMany(
+                { "Project._id": doc._id },
+                { $set: { "Project.Title": body.Title } }
+              );
+            }
+          }
           if (err) {
             console.log(err);
             return res.send(500, { error: err });
@@ -178,18 +223,34 @@ app.post("/item/:variant", async (req, res) => {
         }
       );
     } else if (variant === "inspiration") {
-      // Update Titles in Ideas
       inspirationModel.findOneAndUpdate(
         { _id: body._id },
         body,
         { upsert: true },
-        (err, doc) => {
+        async (err, doc) => {
           if (doc) {
             doc.ImageRefs.forEach((item) => {
               if (!body.ImageRefs.includes(item)) {
                 removeImage(variant, item);
               }
             });
+            const removedIdeas = doc.Ideas.filter(
+              (item) => !body.Ideas.includes(item)
+            ).map((item) => item._id);
+            await ideaModel.updateMany(
+              { _id: { $in: removedIdeas } },
+              {
+                $pull: {
+                  Inspirations: { _id: doc._id },
+                },
+              }
+            );
+            if (body.Title !== doc.Title) {
+              await ideaModel.updateMany(
+                { "Inspirations._id": doc._id },
+                { $set: { "Inspirations.$.Title": body.Title } }
+              );
+            }
           }
           if (err) {
             console.log(err);
@@ -233,10 +294,12 @@ app.delete("/item/:variant/:id", async (req, res) => {
       });
     } else if (variant === "project") {
       await projectModel.findOneAndDelete({ _id: id }, {}, async (err, doc) => {
-        await ideaModel.updateMany(
-          { "Project._id": doc._id },
-          { $set: { Project: null } }
-        );
+        if (doc) {
+          await ideaModel.updateMany(
+            { "Project._id": doc._id },
+            { $set: { Project: null } }
+          );
+        }
         if (err) {
           console.log(err);
           return res.send(500, { error: err });
