@@ -76,9 +76,8 @@ app.get("/", async (req, res) => {
   }
 });
 
-app.post("/item/:variant", async (req, res) => {
+app.post("/item/idea", async (req, res) => {
   const body = req.body;
-  const { variant } = req.params;
   try {
     if (!body._id) body._id = new ObjectId();
     if (body.ImageRefs) {
@@ -150,116 +149,209 @@ app.post("/item/:variant", async (req, res) => {
     } else {
       body.Project = null;
     }
-
-    if (variant === "idea") {
-      ideaModel.findOneAndUpdate(
-        { _id: body._id },
-        body,
-        { upsert: true },
-        async (err, doc) => {
-          if (doc) {
-            doc.ImageRefs.forEach((item) => {
-              if (!body.ImageRefs.includes(item)) {
-                removeImage(variant, item);
-              }
-            });
-            if (body.Project !== doc.Project) {
-              await projectModel.findOneAndUpdate(
-                { _id: doc.Project._id },
-                { $pull: { Ideas: { _id: doc._id } } }
-              );
+    ideaModel.findOneAndUpdate(
+      { _id: body._id },
+      body,
+      { upsert: true },
+      async (err, doc) => {
+        if (doc) {
+          doc.ImageRefs.forEach((item) => {
+            if (!body.ImageRefs.includes(item)) {
+              removeImage(variant, item);
             }
-            const removedInspirations = doc.Inspirations.filter(
-              (item) => !body.Inspirations.includes(item)
-            ).map((item) => item._id);
-            await inspirationModel.updateMany(
-              { _id: { $in: removedInspirations } },
+          });
+          if (body.Project !== doc.Project) {
+            await projectModel.findOneAndUpdate(
+              { _id: doc.Project._id },
               { $pull: { Ideas: { _id: doc._id } } }
             );
-            if (body.Title !== doc.Title) {
-              await inspirationModel.updateMany(
-                { "Ideas._id": doc._id },
-                { $set: { "Ideas.$.Title": body.Title } }
-              );
-              await projectModel.updateOne(
-                { "Ideas._id": doc._id },
-                { $set: { "Ideas.$.Title": body.Title } }
-              );
-            }
           }
-          if (err) {
-            console.log(err);
-            return res.send(500, { error: err });
-          }
-          return res.status(200).send();
-        }
-      );
-    } else if (variant === "project") {
-      projectModel.findOneAndUpdate(
-        { _id: body._id },
-        body,
-        { upsert: true },
-        async (err, doc) => {
-          if (doc) {
-            const removedIdeas = doc.Ideas.filter(
-              (item) => !body.Ideas.includes(item)
-            ).map((item) => item._id);
-            await ideaModel.updateMany(
-              { _id: { $in: removedIdeas } },
-              { $set: { Project: null } }
+          const removedInspirations = doc.Inspirations.filter(
+            (item) => !body.Inspirations.includes(item)
+          ).map((item) => item._id);
+          await inspirationModel.updateMany(
+            { _id: { $in: removedInspirations } },
+            { $pull: { Ideas: { _id: doc._id } } }
+          );
+          if (body.Title !== doc.Title) {
+            await inspirationModel.updateMany(
+              { "Ideas._id": doc._id },
+              { $set: { "Ideas.$.Title": body.Title } }
             );
-            if (body.Title !== doc.Title) {
-              await ideaModel.updateMany(
-                { "Project._id": doc._id },
-                { $set: { "Project.Title": body.Title } }
-              );
-            }
-          }
-          if (err) {
-            console.log(err);
-            return res.send(500, { error: err });
-          }
-          return res.status(200).send();
-        }
-      );
-    } else if (variant === "inspiration") {
-      inspirationModel.findOneAndUpdate(
-        { _id: body._id },
-        body,
-        { upsert: true },
-        async (err, doc) => {
-          if (doc) {
-            doc.ImageRefs.forEach((item) => {
-              if (!body.ImageRefs.includes(item)) {
-                removeImage(variant, item);
-              }
-            });
-            const removedIdeas = doc.Ideas.filter(
-              (item) => !body.Ideas.includes(item)
-            ).map((item) => item._id);
-            await ideaModel.updateMany(
-              { _id: { $in: removedIdeas } },
-              {
-                $pull: {
-                  Inspirations: { _id: doc._id },
-                },
-              }
+            await projectModel.updateOne(
+              { "Ideas._id": doc._id },
+              { $set: { "Ideas.$.Title": body.Title } }
             );
-            if (body.Title !== doc.Title) {
-              await ideaModel.updateMany(
-                { "Inspirations._id": doc._id },
-                { $set: { "Inspirations.$.Title": body.Title } }
-              );
-            }
           }
-          if (err) {
-            console.log(err);
-            return res.send(500, { error: err });
-          }
-          return res.status(200).send();
         }
-      );
-    } else return res.status(500).send();
+        if (err) {
+          console.log(err);
+          return res.send(500, { error: err });
+        }
+        return res.status(200).send();
+      }
+    );
+  } catch (error) {
+    console.log(error);
+    res.status(500).send(error);
+  }
+});
+
+app.post("/item/inspiration", async (req, res) => {
+  const body = req.body;
+  try {
+    if (!body._id) body._id = new ObjectId();
+    if (body.ImageRefs) {
+      for (let i = 0; i < body.ImageRefs.length; i++) {
+        const image = body.ImageRefs[i];
+        if (typeof image === "string" && isURL(image)) {
+          const imageName = `${uuidv4()}.jpg`;
+          await downloadImage(body.ImageRefs[i], body.Variant, imageName);
+          body.ImageRefs[i] = imageName;
+        } else if (image.file) {
+          const imageName = `${uuidv4()}.jpg`;
+          await saveImage(body.ImageRefs[i], body.Variant, imageName);
+          body.ImageRefs[i] = imageName;
+        }
+      }
+    }
+    if (body.Tags) {
+      for (let i = 0; i < body.Tags.length; i++) {
+        const tag = body.Tags[i];
+        if (!tag._id) {
+          tag._id = new ObjectId();
+          await tagModel.create(tag);
+        }
+      }
+    }
+    if (body.Ideas) {
+      for (let i = 0; i < body.Ideas.length; i++) {
+        const idea = body.Ideas[i];
+        if (!idea.Inspirations) idea.Inspirations = [];
+        if (!idea.Inspirations.some((item) => item._id === body._id)) {
+          idea.Inspirations.push({
+            _id: body._id,
+            Title: body.Title,
+          });
+        }
+        if (!idea._id) {
+          idea._id = new ObjectId();
+          idea.DateCreated = dayjs().format();
+          await ideaModel.create(idea);
+        } else {
+          await ideaModel.findOneAndUpdate(
+            { _id: idea._id, "Inspirations._id": { $ne: body._id } },
+            {
+              $addToSet: {
+                Inspirations: { _id: body._id, Title: body.Title },
+              },
+            }
+          );
+        }
+      }
+    }
+    inspirationModel.findOneAndUpdate(
+      { _id: body._id },
+      body,
+      { upsert: true },
+      async (err, doc) => {
+        if (doc) {
+          doc.ImageRefs.forEach((item) => {
+            if (!body.ImageRefs.includes(item)) {
+              removeImage(variant, item);
+            }
+          });
+          const removedIdeas = doc.Ideas.filter(
+            (item) => !body.Ideas.includes(item)
+          ).map((item) => item._id);
+          await ideaModel.updateMany(
+            { _id: { $in: removedIdeas } },
+            {
+              $pull: {
+                Inspirations: { _id: doc._id },
+              },
+            }
+          );
+          if (body.Title !== doc.Title) {
+            await ideaModel.updateMany(
+              { "Inspirations._id": doc._id },
+              { $set: { "Inspirations.$.Title": body.Title } }
+            );
+          }
+        }
+        if (err) {
+          console.log(err);
+          return res.send(500, { error: err });
+        }
+        return res.status(200).send();
+      }
+    );
+  } catch (error) {
+    console.log(error);
+    res.status(500).send(error);
+  }
+});
+
+app.post("/item/project", async (req, res) => {
+  const body = req.body;
+  try {
+    if (!body._id) body._id = new ObjectId();
+    if (body.Tags) {
+      for (let i = 0; i < body.Tags.length; i++) {
+        const tag = body.Tags[i];
+        if (!tag._id) {
+          tag._id = new ObjectId();
+          await tagModel.create(tag);
+        }
+      }
+    }
+    if (body.Ideas) {
+      for (let i = 0; i < body.Ideas.length; i++) {
+        const idea = body.Ideas[i];
+        if (!idea._id) {
+          idea._id = new ObjectId();
+          idea.DateCreated = dayjs().format();
+          idea.Project = { _id: body._id, Title: body.Title };
+          await ideaModel.create(idea);
+        } else {
+          await ideaModel.findOneAndUpdate(
+            { _id: idea._id },
+            {
+              $set: {
+                Project: { _id: body._id, Title: body.Title },
+              },
+            }
+          );
+        }
+      }
+    }
+    projectModel.findOneAndUpdate(
+      { _id: body._id },
+      body,
+      { upsert: true },
+      async (err, doc) => {
+        if (doc) {
+          const removedIdeas = doc.Ideas.filter(
+            (item) => !body.Ideas.includes(item)
+          ).map((item) => item._id);
+          await ideaModel.updateMany(
+            { _id: { $in: removedIdeas } },
+            { $set: { Project: null } }
+          );
+          if (body.Title !== doc.Title) {
+            await ideaModel.updateMany(
+              { "Project._id": doc._id },
+              { $set: { "Project.Title": body.Title } }
+            );
+          }
+        }
+        if (err) {
+          console.log(err);
+          return res.send(500, { error: err });
+        }
+        return res.status(200).send();
+      }
+    );
   } catch (error) {
     console.log(error);
     res.status(500).send(error);
