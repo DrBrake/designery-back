@@ -44,8 +44,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
-
 mongoose.connect("mongodb://127.0.0.1:27017/designery", {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -76,286 +74,308 @@ app.get("/", async (req, res) => {
   }
 });
 
-app.post("/item/idea", async (req, res) => {
-  const body = req.body;
-  try {
-    if (!body._id) body._id = new ObjectId();
-    if (body.ImageRefs) {
-      for (let i = 0; i < body.ImageRefs.length; i++) {
-        const image = body.ImageRefs[i];
-        if (typeof image === "string" && isURL(image)) {
-          const imageName = `${uuidv4()}.jpg`;
-          await downloadImage(body.ImageRefs[i], body.Variant, imageName);
-          body.ImageRefs[i] = imageName;
-        } else if (image.file) {
-          const imageName = `${uuidv4()}.jpg`;
-          await saveImage(body.ImageRefs[i], body.Variant, imageName);
-          body.ImageRefs[i] = imageName;
-        }
+const postIdea = async (body) => {
+  if (!body._id) body._id = new ObjectId();
+  if (body.ImageRefs) {
+    for (let i = 0; i < body.ImageRefs.length; i++) {
+      const image = body.ImageRefs[i];
+      if (typeof image === "string" && isURL(image)) {
+        const imageName = `${uuidv4()}.jpg`;
+        await downloadImage(body.ImageRefs[i], body.Variant, imageName);
+        body.ImageRefs[i] = imageName;
+      } else if (image.file) {
+        const imageName = `${uuidv4()}.jpg`;
+        await saveImage(body.ImageRefs[i], body.Variant, imageName);
+        body.ImageRefs[i] = imageName;
       }
     }
-    if (body.Tags) {
-      for (let i = 0; i < body.Tags.length; i++) {
-        const tag = body.Tags[i];
-        if (!tag._id) {
-          tag._id = new ObjectId();
-          await tagModel.create(tag);
-        }
+  }
+  if (body.Tags) {
+    for (let i = 0; i < body.Tags.length; i++) {
+      const tag = body.Tags[i];
+      if (!tag._id) {
+        tag._id = new ObjectId();
+        await tagModel.create(tag);
       }
     }
-    if (body.Inspirations) {
-      for (let i = 0; i < body.Inspirations.length; i++) {
-        const inspiration = body.Inspirations[i];
-        if (!inspiration.Ideas) inspiration.Ideas = [];
-        if (!inspiration.Ideas.some((item) => item._id === body._id)) {
-          inspiration.Ideas.push({
-            _id: body._id,
-            Title: body.Title,
-          });
-        }
-        if (!inspiration._id) {
-          inspiration._id = new ObjectId();
-          inspiration.DateCreated = dayjs().format();
-          await inspirationModel.create(inspiration);
-        } else {
-          await inspirationModel.findOneAndUpdate(
-            { _id: inspiration._id, "Ideas._id": { $ne: body._id } },
-            {
-              $addToSet: {
-                Ideas: { _id: body._id, Title: body.Title },
-              },
-            }
-          );
-        }
-      }
-    }
-    if (body.Project) {
-      const project = body.Project;
-      if (!project.Ideas) project.Ideas = [];
-      if (!project.Ideas.some((item) => item._id === body._id)) {
-        project.Ideas.push({
+  }
+  if (body.Inspirations) {
+    for (let i = 0; i < body.Inspirations.length; i++) {
+      const inspiration = body.Inspirations[i];
+      if (!inspiration.Ideas) inspiration.Ideas = [];
+      if (!inspiration.Ideas.some((item) => item._id === body._id)) {
+        inspiration.Ideas.push({
           _id: body._id,
           Title: body.Title,
         });
       }
-      await projectModel.findOneAndUpdate(
-        { _id: project._id, "Ideas._id": { $ne: body._id } },
-        {
-          $addToSet: {
-            Ideas: { _id: body._id, Title: body.Title },
-          },
-        }
-      );
-    } else {
-      body.Project = null;
-    }
-    ideaModel.findOneAndUpdate(
-      { _id: body._id },
-      body,
-      { upsert: true },
-      async (err, doc) => {
-        if (doc) {
-          doc.ImageRefs.forEach((item) => {
-            if (!body.ImageRefs.includes(item)) {
-              removeImage(variant, item);
-            }
-          });
-          if (body.Project !== doc.Project) {
-            await projectModel.findOneAndUpdate(
-              { _id: doc.Project._id },
-              { $pull: { Ideas: { _id: doc._id } } }
-            );
+      if (!inspiration._id) {
+        inspiration._id = new ObjectId();
+        inspiration.DateCreated = dayjs().format();
+        await inspirationModel.create(inspiration);
+      } else {
+        await inspirationModel.findOneAndUpdate(
+          { _id: inspiration._id, "Ideas._id": { $ne: body._id } },
+          {
+            $addToSet: {
+              Ideas: { _id: body._id, Title: body.Title },
+            },
           }
-          const removedInspirations = doc.Inspirations.filter(
-            (item) => !body.Inspirations.includes(item)
-          ).map((item) => item._id);
-          await inspirationModel.updateMany(
-            { _id: { $in: removedInspirations } },
+        );
+      }
+    }
+  }
+  if (body.Project) {
+    const project = body.Project;
+    if (!project.Ideas) project.Ideas = [];
+    if (!project.Ideas.some((item) => item._id === body._id)) {
+      project.Ideas.push({
+        _id: body._id,
+        Title: body.Title,
+      });
+    }
+    await projectModel.findOneAndUpdate(
+      { _id: project._id, "Ideas._id": { $ne: body._id } },
+      {
+        $addToSet: {
+          Ideas: { _id: body._id, Title: body.Title },
+        },
+      }
+    );
+  } else {
+    body.Project = null;
+  }
+  await ideaModel.findOneAndUpdate(
+    { _id: body._id },
+    body,
+    { upsert: true },
+    async (error, doc) => {
+      if (doc) {
+        doc.ImageRefs.forEach((item) => {
+          if (!body.ImageRefs.includes(item)) {
+            removeImage(variant, item);
+          }
+        });
+        if (body.Project !== doc.Project) {
+          await projectModel.findOneAndUpdate(
+            { _id: doc.Project._id },
             { $pull: { Ideas: { _id: doc._id } } }
           );
-          if (body.Title !== doc.Title) {
-            await inspirationModel.updateMany(
-              { "Ideas._id": doc._id },
-              { $set: { "Ideas.$.Title": body.Title } }
-            );
-            await projectModel.updateOne(
-              { "Ideas._id": doc._id },
-              { $set: { "Ideas.$.Title": body.Title } }
-            );
-          }
         }
-        if (err) {
-          console.log(err);
-          return res.send(500, { error: err });
+        const removedInspirations = doc.Inspirations.filter(
+          (item) => !body.Inspirations.includes(item)
+        ).map((item) => item._id);
+        await inspirationModel.updateMany(
+          { _id: { $in: removedInspirations } },
+          { $pull: { Ideas: { _id: doc._id } } }
+        );
+        if (body.Title !== doc.Title) {
+          await inspirationModel.updateMany(
+            { "Ideas._id": doc._id },
+            { $set: { "Ideas.$.Title": body.Title } }
+          );
+          await projectModel.updateOne(
+            { "Ideas._id": doc._id },
+            { $set: { "Ideas.$.Title": body.Title } }
+          );
         }
-        return res.status(200).send();
       }
-    );
+      if (error) {
+        throw error;
+      }
+    }
+  );
+  return Promise.resolve();
+};
+
+app.post("/item/idea", async (req, res) => {
+  try {
+    await postIdea(req.body);
+    return res.status(200).send();
   } catch (error) {
     console.log(error);
     res.status(500).send(error);
   }
 });
+
+const postInspiration = async (body) => {
+  if (!body._id) body._id = new ObjectId();
+  if (body.ImageRefs) {
+    for (let i = 0; i < body.ImageRefs.length; i++) {
+      const image = body.ImageRefs[i];
+      if (typeof image === "string" && isURL(image)) {
+        const imageName = `${uuidv4()}.jpg`;
+        await downloadImage(body.ImageRefs[i], body.Variant, imageName);
+        body.ImageRefs[i] = imageName;
+      } else if (image.file) {
+        const imageName = `${uuidv4()}.jpg`;
+        await saveImage(body.ImageRefs[i], body.Variant, imageName);
+        body.ImageRefs[i] = imageName;
+      }
+    }
+  }
+  if (body.Tags) {
+    for (let i = 0; i < body.Tags.length; i++) {
+      const tag = body.Tags[i];
+      if (!tag._id) {
+        tag._id = new ObjectId();
+        await tagModel.create(tag);
+      }
+    }
+  }
+  if (body.Ideas) {
+    for (let i = 0; i < body.Ideas.length; i++) {
+      const idea = body.Ideas[i];
+      if (!idea.Inspirations) idea.Inspirations = [];
+      if (!idea.Inspirations.some((item) => item._id === body._id)) {
+        idea.Inspirations.push({
+          _id: body._id,
+          Title: body.Title,
+        });
+      }
+      if (!idea._id) {
+        idea._id = new ObjectId();
+        idea.DateCreated = dayjs().format();
+        await ideaModel.create(idea);
+      } else {
+        await ideaModel.findOneAndUpdate(
+          { _id: idea._id, "Inspirations._id": { $ne: body._id } },
+          {
+            $addToSet: {
+              Inspirations: { _id: body._id, Title: body.Title },
+            },
+          }
+        );
+      }
+    }
+  }
+  await inspirationModel.findOneAndUpdate(
+    { _id: body._id },
+    body,
+    { upsert: true },
+    async (error, doc) => {
+      if (doc) {
+        doc.ImageRefs.forEach((item) => {
+          if (!body.ImageRefs.includes(item)) {
+            removeImage(variant, item);
+          }
+        });
+        const removedIdeas = doc.Ideas.filter(
+          (item) => !body.Ideas.includes(item)
+        ).map((item) => item._id);
+        await ideaModel.updateMany(
+          { _id: { $in: removedIdeas } },
+          {
+            $pull: {
+              Inspirations: { _id: doc._id },
+            },
+          }
+        );
+        if (body.Title !== doc.Title) {
+          await ideaModel.updateMany(
+            { "Inspirations._id": doc._id },
+            { $set: { "Inspirations.$.Title": body.Title } }
+          );
+        }
+      }
+      if (error) {
+        throw error;
+      }
+    }
+  );
+  return Promise.resolve();
+};
 
 app.post("/item/inspiration", async (req, res) => {
-  const body = req.body;
   try {
-    if (!body._id) body._id = new ObjectId();
-    if (body.ImageRefs) {
-      for (let i = 0; i < body.ImageRefs.length; i++) {
-        const image = body.ImageRefs[i];
-        if (typeof image === "string" && isURL(image)) {
-          const imageName = `${uuidv4()}.jpg`;
-          await downloadImage(body.ImageRefs[i], body.Variant, imageName);
-          body.ImageRefs[i] = imageName;
-        } else if (image.file) {
-          const imageName = `${uuidv4()}.jpg`;
-          await saveImage(body.ImageRefs[i], body.Variant, imageName);
-          body.ImageRefs[i] = imageName;
-        }
-      }
-    }
-    if (body.Tags) {
-      for (let i = 0; i < body.Tags.length; i++) {
-        const tag = body.Tags[i];
-        if (!tag._id) {
-          tag._id = new ObjectId();
-          await tagModel.create(tag);
-        }
-      }
-    }
-    if (body.Ideas) {
-      for (let i = 0; i < body.Ideas.length; i++) {
-        const idea = body.Ideas[i];
-        if (!idea.Inspirations) idea.Inspirations = [];
-        if (!idea.Inspirations.some((item) => item._id === body._id)) {
-          idea.Inspirations.push({
-            _id: body._id,
-            Title: body.Title,
-          });
-        }
-        if (!idea._id) {
-          idea._id = new ObjectId();
-          idea.DateCreated = dayjs().format();
-          await ideaModel.create(idea);
-        } else {
-          await ideaModel.findOneAndUpdate(
-            { _id: idea._id, "Inspirations._id": { $ne: body._id } },
-            {
-              $addToSet: {
-                Inspirations: { _id: body._id, Title: body.Title },
-              },
-            }
-          );
-        }
-      }
-    }
-    inspirationModel.findOneAndUpdate(
-      { _id: body._id },
-      body,
-      { upsert: true },
-      async (err, doc) => {
-        if (doc) {
-          doc.ImageRefs.forEach((item) => {
-            if (!body.ImageRefs.includes(item)) {
-              removeImage(variant, item);
-            }
-          });
-          const removedIdeas = doc.Ideas.filter(
-            (item) => !body.Ideas.includes(item)
-          ).map((item) => item._id);
-          await ideaModel.updateMany(
-            { _id: { $in: removedIdeas } },
-            {
-              $pull: {
-                Inspirations: { _id: doc._id },
-              },
-            }
-          );
-          if (body.Title !== doc.Title) {
-            await ideaModel.updateMany(
-              { "Inspirations._id": doc._id },
-              { $set: { "Inspirations.$.Title": body.Title } }
-            );
-          }
-        }
-        if (err) {
-          console.log(err);
-          return res.send(500, { error: err });
-        }
-        return res.status(200).send();
-      }
-    );
+    await postInspiration(req.body);
+    return res.status(200).send();
   } catch (error) {
     console.log(error);
     res.status(500).send(error);
   }
 });
 
-app.post("/item/project", async (req, res) => {
-  const body = req.body;
-  try {
-    if (!body._id) body._id = new ObjectId();
-    if (body.Tags) {
-      for (let i = 0; i < body.Tags.length; i++) {
-        const tag = body.Tags[i];
-        if (!tag._id) {
-          tag._id = new ObjectId();
-          await tagModel.create(tag);
-        }
+const postProject = async (body) => {
+  if (!body._id) body._id = new ObjectId();
+  if (body.Tags) {
+    for (let i = 0; i < body.Tags.length; i++) {
+      const tag = body.Tags[i];
+      if (!tag._id) {
+        tag._id = new ObjectId();
+        await tagModel.create(tag);
       }
     }
-    if (body.Ideas) {
-      for (let i = 0; i < body.Ideas.length; i++) {
-        const idea = body.Ideas[i];
-        if (!idea._id) {
-          idea._id = new ObjectId();
-          idea.DateCreated = dayjs().format();
-          idea.Project = { _id: body._id, Title: body.Title };
-          await ideaModel.create(idea);
-        } else {
-          await ideaModel.findOneAndUpdate(
-            { _id: idea._id },
-            {
-              $set: {
-                Project: { _id: body._id, Title: body.Title },
-              },
-            }
-          );
-        }
-      }
-    }
-    projectModel.findOneAndUpdate(
-      { _id: body._id },
-      body,
-      { upsert: true },
-      async (err, doc) => {
-        if (doc) {
-          const removedIdeas = doc.Ideas.filter(
-            (item) => !body.Ideas.includes(item)
-          ).map((item) => item._id);
-          await ideaModel.updateMany(
-            { _id: { $in: removedIdeas } },
-            { $set: { Project: null } }
-          );
-          if (body.Title !== doc.Title) {
-            await ideaModel.updateMany(
-              { "Project._id": doc._id },
-              { $set: { "Project.Title": body.Title } }
-            );
+  }
+  if (body.Ideas) {
+    for (let i = 0; i < body.Ideas.length; i++) {
+      const idea = body.Ideas[i];
+      if (!idea._id) {
+        idea._id = new ObjectId();
+        idea.DateCreated = dayjs().format();
+        idea.Project = { _id: body._id, Title: body.Title };
+        await ideaModel.create(idea);
+      } else {
+        await ideaModel.findOneAndUpdate(
+          { _id: idea._id },
+          {
+            $set: {
+              Project: { _id: body._id, Title: body.Title },
+            },
           }
-        }
-        if (err) {
-          console.log(err);
-          return res.send(500, { error: err });
-        }
-        return res.status(200).send();
+        );
       }
-    );
+    }
+  }
+  await projectModel.findOneAndUpdate(
+    { _id: body._id },
+    body,
+    { upsert: true },
+    async (error, doc) => {
+      if (doc) {
+        const removedIdeas = doc.Ideas.filter(
+          (item) => !body.Ideas.includes(item)
+        ).map((item) => item._id);
+        await ideaModel.updateMany(
+          { _id: { $in: removedIdeas } },
+          { $set: { Project: null } }
+        );
+        if (body.Title !== doc.Title) {
+          await ideaModel.updateMany(
+            { "Project._id": doc._id },
+            { $set: { "Project.Title": body.Title } }
+          );
+        }
+      }
+      if (error) {
+        throw error;
+      }
+    }
+  );
+};
+
+app.post("/item/project", async (req, res) => {
+  try {
+    await postProject(req.body);
+    return res.status(200).send();
   } catch (error) {
     console.log(error);
     res.status(500).send(error);
   }
+});
+
+app.post("/item/multiple", async (req, res) => {
+  const body = req.body;
+  for (let i = 0; i < body.length; i++) {
+    if (body[i].Variant === "idea") {
+      await postIdea(body[i]);
+    } else if (body[i].Variant === "inspiration") {
+      await postInspiration(body[i]);
+    } else if (body[i].Variant === "project") {
+      await postProject(body[i]);
+    }
+  }
+  return res.status(200).send();
 });
 
 app.delete("/item/:variant/:id", async (req, res) => {
