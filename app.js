@@ -4,6 +4,7 @@ const schemas = require("./schema");
 const path = require("path");
 const dayjs = require("dayjs");
 const { v4: uuidv4 } = require("uuid");
+const jwt = require("jsonwebtoken");
 
 const {
   isURL,
@@ -20,6 +21,8 @@ app.use(express.urlencoded({ limit: "50mb" }));
 
 const dir = path.join(__dirname, "public");
 
+const SECRET_KEY = "Seecrets!";
+
 const ideaModel = mongoose.model("Idea", schemas.ideaSchema, "ideas");
 const projectModel = mongoose.model(
   "Project",
@@ -32,13 +35,15 @@ const inspirationModel = mongoose.model(
   "inspirations"
 );
 const tagModel = mongoose.model("Tag", schemas.tagSchema, "tags");
+const userModel = mongoose.model("User", schemas.userSchema, "users");
+
 const ObjectId = mongoose.Types.ObjectId;
 
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "http://localhost:3000");
   res.header(
     "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept"
+    "Origin, X-Requested-With, Content-Type, Accept, authorization"
   );
   res.header("Access-Control-Allow-Methods", "POST, GET, OPTIONS, DELETE");
   next();
@@ -55,8 +60,23 @@ db.once("open", () => {
   console.log("Database connection established successfully");
 });
 
+const isTokenValid = (req) => {
+  let token = req.headers["authorization"];
+  if (token) {
+    token = token.split("Bearer ")[1];
+    const decoded = jwt.verify(token, SECRET_KEY);
+    if (decoded) return true;
+  }
+  return false;
+};
+
+const filterSecretValues = (array) => {
+  return array.filter((val) => !val.Secret);
+};
+
 app.get("/", async (req, res) => {
   try {
+    const validToken = isTokenValid(req);
     const ideaQuery = ideaModel.find().exec();
     const projectQuery = projectModel.find().exec();
     const inspirationQuery = inspirationModel.find().exec();
@@ -67,7 +87,16 @@ app.get("/", async (req, res) => {
       inspirationQuery,
       tagQuery,
     ]);
-    res.send({ ideas, projects, inspirations, tags });
+    if (validToken) {
+      res.send({ ideas, projects, inspirations, tags });
+    } else {
+      res.send({
+        ideas: filterSecretValues(ideas),
+        projects: filterSecretValues(projects),
+        inspirations: filterSecretValues(inspirations),
+        tags: filterSecretValues(tags),
+      });
+    }
   } catch (error) {
     console.log(error);
     res.status(500).send(error);
@@ -466,6 +495,24 @@ app.get("/images/:variant/:image", async (req, res) => {
     console.log(error);
     res.status(500).send(error);
   }
+});
+
+app.post("/login", async (req, res) => {
+  const UserName = req.params.UserName;
+  const Password = req.params.Password;
+  const exists = await userModel.find({
+    UserName: UserName,
+    Password: Password,
+  });
+  if (exists) {
+    const token = jwt.sign(
+      { UserName: UserName, Password: Password },
+      SECRET_KEY,
+      { expiresIn: "1d" }
+    );
+    return res.status(200).send({ token });
+  }
+  res.status(401).send();
 });
 
 app.listen(8081, () => {
