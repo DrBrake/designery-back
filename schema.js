@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
 const ObjectId = mongoose.Schema.Types.ObjectId;
 
-const BaseItem = { _id: ObjectId, Title: String };
+const BaseItem = { _id: ObjectId, Title: String, Secret: Boolean };
 
 exports.ideaSchema = new Schema(
   {
@@ -18,7 +18,6 @@ exports.ideaSchema = new Schema(
     Inspirations: [BaseItem],
     DateCreated: String,
     Variant: String,
-    Secret: Boolean,
   },
   { minimize: false }
 );
@@ -33,7 +32,6 @@ exports.projectSchema = new Schema(
     Completed: Boolean,
     DateCreated: String,
     Variant: String,
-    Secret: Boolean,
   },
   { minimize: false }
 );
@@ -49,16 +47,11 @@ exports.inspirationSchema = new Schema(
     Completed: Boolean,
     DateCreated: String,
     Variant: String,
-    Secret: Boolean,
   },
   { minimize: false }
 );
 
-exports.tagSchema = new Schema({
-  _id: ObjectId,
-  Title: String,
-  Secret: Boolean,
-});
+exports.tagSchema = new Schema(BaseItem);
 
 exports.userSchema = new Schema({
   _id: ObjectId,

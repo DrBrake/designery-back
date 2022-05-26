@@ -477,6 +477,57 @@ app.delete("/item/:variant/:id", async (req, res) => {
   }
 });
 
+app.post("/tag", async (req, res) => {
+  const body = req.body;
+  await tagModel.findOneAndUpdate(
+    { _id: body._id },
+    body,
+    { upsert: true },
+    async (err, doc) => {
+      if (doc) {
+        if (body.Title !== doc.Title) {
+          await ideaModel.updateMany(
+            { "Tags._id": doc._id },
+            { $set: { "Tags.$.Title": body.Title } }
+          );
+          await inspirationModel.updateMany(
+            { "Tags._id": doc._id },
+            { $set: { "Tags.$.Title": body.Title } }
+          );
+          await projectModel.updateMany(
+            { "Tags._id": doc._id },
+            { $set: { "Tags.$.Title": body.Title } }
+          );
+        }
+      }
+      if (err) {
+        console.log(err);
+        return res.send(500, { error: err });
+      }
+      return res.status(200).send();
+    }
+  );
+});
+
+app.delete("/tag", async (req, res) => {
+  const body = req.body;
+  await tagModel.findOneAndDelete({ _id: body._id }, {}, async (err, doc) => {
+    if (doc) {
+      await ideaModel.updateMany({}, { $pull: { Tags: { _id: doc._id } } });
+      await inspirationModel.updateMany(
+        {},
+        { $pull: { Tags: { _id: doc._id } } }
+      );
+      await projectModel.updateMany({}, { $pull: { Tags: { _id: doc._id } } });
+    }
+    if (err) {
+      console.log(err);
+      return res.send(500, { error: err });
+    }
+    return res.status(200).send();
+  });
+});
+
 app.get("/images/:variant/:image", async (req, res) => {
   try {
     const data = await getImage(
