@@ -18,6 +18,7 @@ exports.ideaSchema = new Schema(
     Inspirations: [BaseItem],
     DateCreated: String,
     Variant: String,
+    Secret: Boolean,
   },
   { minimize: false }
 );
@@ -32,6 +33,7 @@ exports.projectSchema = new Schema(
     Completed: Boolean,
     DateCreated: String,
     Variant: String,
+    Secret: Boolean,
   },
   { minimize: false }
 );
@@ -47,6 +49,7 @@ exports.inspirationSchema = new Schema(
     Completed: Boolean,
     DateCreated: String,
     Variant: String,
+    Secret: Boolean,
   },
   { minimize: false }
 );
