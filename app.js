@@ -174,7 +174,8 @@ const postIdea = async (body) => {
   } else {
     body.Project = null;
   }
-  await ideaModel.findOneAndUpdate(
+
+  ideaModel.findOneAndUpdate(
     { _id: body._id },
     body,
     { upsert: true },
@@ -208,13 +209,13 @@ const postIdea = async (body) => {
             { $set: { "Ideas.$.Title": body.Title } }
           );
         }
+        return Promise.resolve();
       }
       if (error) {
         throw error;
       }
     }
   );
-  return Promise.resolve();
 };
 
 app.post("/item/idea", async (req, res) => {
@@ -278,7 +279,8 @@ const postInspiration = async (body) => {
       }
     }
   }
-  await inspirationModel.findOneAndUpdate(
+
+  inspirationModel.findOneAndUpdate(
     { _id: body._id },
     body,
     { upsert: true },
@@ -306,13 +308,13 @@ const postInspiration = async (body) => {
             { $set: { "Inspirations.$.Title": body.Title } }
           );
         }
+        return Promise.resolve();
       }
       if (error) {
         throw error;
       }
     }
   );
-  return Promise.resolve();
 };
 
 app.post("/item/inspiration", async (req, res) => {
@@ -356,7 +358,8 @@ const postProject = async (body) => {
       }
     }
   }
-  await projectModel.findOneAndUpdate(
+
+  projectModel.findOneAndUpdate(
     { _id: body._id },
     body,
     { upsert: true },
@@ -375,6 +378,7 @@ const postProject = async (body) => {
             { $set: { "Project.Title": body.Title } }
           );
         }
+        return Promise.resolve();
       }
       if (error) {
         throw error;
